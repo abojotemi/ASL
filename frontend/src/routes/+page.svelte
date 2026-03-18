@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
+
 	let videoEl: HTMLVideoElement;
 	let canvasEl: HTMLCanvasElement;
 	let stream: MediaStream | null = $state(null);
@@ -9,6 +11,7 @@
 	let isLoading = $state(false);
 	let errorMsg = $state('');
 	let intervalId: ReturnType<typeof setInterval> | null = null;
+	let requestInFlight = false;
 	let history: { letter: string; confidence: number; time: number }[] = $state([]);
 
 	async function startCamera() {
@@ -39,6 +42,7 @@
 			stream = null;
 		}
 		isStreaming = false;
+		requestInFlight = false;
 		statusText = 'Camera off';
 		prediction = '—';
 		confidence = 0;
@@ -49,7 +53,7 @@
 	}
 
 	async function captureAndPredict() {
-		if (!videoEl || !canvasEl || !isStreaming) return;
+		if (!videoEl || !canvasEl || !isStreaming || requestInFlight) return;
 
 		const ctx = canvasEl.getContext('2d')!;
 		canvasEl.width = videoEl.videoWidth;
@@ -59,6 +63,7 @@
 		const base64 = canvasEl.toDataURL('image/jpeg', 0.8);
 
 		try {
+			requestInFlight = true;
 			isLoading = true;
 			const res = await fetch('/api/predict', {
 				method: 'POST',
@@ -83,6 +88,7 @@
 		} catch (err) {
 			errorMsg = `Prediction failed: ${err}`;
 		} finally {
+			requestInFlight = false;
 			isLoading = false;
 		}
 	}
@@ -90,6 +96,10 @@
 	function clearHistory() {
 		history = [];
 	}
+
+	onDestroy(() => {
+		stopCamera();
+	});
 </script>
 
 <svelte:head>
@@ -331,24 +341,6 @@
 		margin-bottom: 0.5rem;
 	}
 
-	.logo-icon {
-		font-size: 2.5rem;
-		animation: wave 2s ease-in-out infinite;
-	}
-
-	@keyframes wave {
-		0%,
-		100% {
-			transform: rotate(0deg);
-		}
-		25% {
-			transform: rotate(20deg);
-		}
-		75% {
-			transform: rotate(-10deg);
-		}
-	}
-
 	.logo h1 {
 		font-size: 2.5rem;
 		font-weight: 800;
@@ -359,11 +351,6 @@
 		letter-spacing: -0.02em;
 	}
 
-	.subtitle {
-		color: var(--text-secondary);
-		font-size: 1rem;
-		font-weight: 400;
-	}
 
 	/* ═══════════════════════════════════════════
 	   GRID
@@ -789,44 +776,4 @@
 		font-weight: 500;
 	}
 
-	/* ═══════════════════════════════════════════
-	   INSTRUCTIONS
-	   ═══════════════════════════════════════════ */
-	.instructions {
-		padding: 1rem;
-		background: rgba(255, 255, 255, 0.02);
-		border-radius: var(--radius-sm);
-		border: 1px solid var(--border);
-	}
-
-	.instructions h3 {
-		font-size: 0.9rem;
-		font-weight: 600;
-		color: var(--text-secondary);
-		margin-bottom: 0.65rem;
-	}
-
-	.instructions ul {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
-	}
-
-	.instructions li {
-		font-size: 0.82rem;
-		color: var(--text-muted);
-		padding-left: 1.25rem;
-		position: relative;
-	}
-
-	.instructions li::before {
-		content: '›';
-		position: absolute;
-		left: 0;
-		color: var(--accent-light);
-		font-weight: 700;
-	}
 </style>
